@@ -1,12 +1,17 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/AsyncHandler.js";
-import { IRegister } from "./user.type.js";
+import { ILogin, IRegister } from "./user.type.js";
 import { ApiError } from "../utils/ApiError.js";
 import { uploadToCloudinary } from "../utils/CloudinaryUploadAndDelete.js";
 import { User } from "../models/users.model.js";
 import { registerSchema } from "../validation/validation.js";
 import { IUser } from "../models/model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+
+const options = {
+  httpOnly: true,
+  secure: true,
+};
 
 const generateRefreshAndAccessToken = (user: IUser) => {
   try {
@@ -102,4 +107,60 @@ export const registerUser = asyncHandler(
   }
 );
 
-// export const loginUser = asyncHandler(async())
+export const loginUser = asyncHandler(
+  async (req: Request<{}, {}, ILogin>, res: Response) => {
+    const { email, username, password } = req.body;
+
+    if (!email && !username) {
+      throw new ApiError(400, "Email or username is required");
+    }
+
+    if (!password) {
+      throw new ApiError(400, "Password is required");
+    }
+
+    const isUser = await User.findOne({
+      $or: [{ email }, { username }],
+    });
+
+    if (!isUser) {
+      throw new ApiError(404, "User not found");
+    }
+
+    const isPasswordMatch = await isUser.isCorrectPassword(password);
+
+    if (!isPasswordMatch) {
+      throw new ApiError(400, "Password or Username is incorrect");
+    }
+
+    const { refreshToken, accessToken } = generateRefreshAndAccessToken(isUser);
+    isUser.save({ validateBeforeSave: false });
+
+    const updatedUser = await User.findById(isUser._id).select(
+      "-password -refreshToken"
+    );
+
+    if (!updatedUser) {
+      throw new ApiError(500, "something went wrong while fetching user");
+    }
+
+    // setup cookies
+    res
+      .cookie("refreshToken", refreshToken, {
+        ...options,
+        maxAge: 10 * 24 * 60 * 60 * 1000, //10 days
+      })
+      .cookie("accessToken", accessToken, {
+        ...options,
+        maxAge: 24 * 60 * 60 * 1000, //1day
+      })
+      .status(200)
+      .json(
+        new ApiResponse(200, "User logged in successfully", {
+          user: updatedUser,
+          refreshToken,
+          accessToken,
+        })
+      );
+  }
+);
