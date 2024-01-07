@@ -7,12 +7,11 @@ dotenv.config({
 
 export const connectToDB = async () => {
   try {
-    console.log(process.env.BD_URL!);
     const connectionInstance = await connect(process.env.BD_URL!, {
       dbName: DB_NAME,
     });
     console.log(
-      `🟢  Connected to database`,
+      `🟢  Connected to database and host id : `,
       connectionInstance.connection.host
     );
   } catch (error) {

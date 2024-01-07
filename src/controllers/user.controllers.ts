@@ -4,7 +4,7 @@ import { IRegister } from "./user.type.js";
 import { ApiError } from "../utils/ApiError.js";
 import { uploadToCloudinary } from "../utils/CloudinaryUploadAndDelete.js";
 import { User } from "../models/users.model.js";
-import { registerSchema } from "./validation.js";
+import { registerSchema } from "../validation/validation.js";
 import { IUser } from "../models/model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
@@ -61,9 +61,17 @@ export const registerUser = asyncHandler(
       throw new ApiError(400, "Profile image is required");
     }
     // check if user have given cover image
-    const coverImage = files?.coverImage[0]?.path;
-
+    let coverImage = null;
     let coverImageUpload = null;
+
+    if (
+      files &&
+      Array.isArray(files.coverImage) &&
+      files.coverImage.length > 0
+    ) {
+      coverImage = files.coverImage[0]?.path;
+    }
+
     if (coverImage) {
       // upload to cloudinary
       coverImageUpload = await uploadToCloudinary(coverImage);
@@ -93,3 +101,5 @@ export const registerUser = asyncHandler(
       .json(new ApiResponse(200, "User registered successfully", createdUser));
   }
 );
+
+// export const loginUser = asyncHandler(async())
