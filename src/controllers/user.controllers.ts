@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import Joi from "joi";
+import mongoose from "mongoose";
 import Jwt from "jsonwebtoken";
 import { asyncHandler } from "../utils/AsyncHandler.js";
 import { ILogin, IRegister, IUpdatePassword } from "./user.type.js";
@@ -14,7 +16,6 @@ import {
 } from "../validation/validation.js";
 import { IUser } from "../models/model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import Joi from "joi";
 
 const options = {
   httpOnly: true,
@@ -472,5 +473,59 @@ export const getUserChannelProfile = asyncHandler(
     }
 
     res.status(200).json(new ApiResponse(200, "Channel found", channel[0]));
+  }
+);
+
+export const getWatchHistory = asyncHandler(
+  async (req: RequestWithUser, res: Response) => {
+    const { _id } = req?.user!;
+    if (!_id) {
+      throw new ApiError(401, "Unauthorized, Please login to continue");
+    }
+
+    const user = await User.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(_id),
+        },
+      },
+      {
+        $lookup: {
+          from: "videos",
+          localField: "watchHistory",
+          foreignField: "_id",
+          as: "watchHistory",
+          pipeline: [
+            {
+              $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                  {
+                    $project: {
+                      fullName: 1,
+                      username: 1,
+                      avatar: 1,
+                      createdAt: 1,
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              $addFields: {
+                owner: "$owner",
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, "Watch history", user[0].watchHistory));
   }
 );
