@@ -40,3 +40,18 @@ export const passwordValidation = Joi.object({
     "any.required": "Current password is required",
   }),
 });
+
+export const ValidateUserDetail = Joi.object({
+  email: Joi.string().email().required().messages({
+    "string.email": "Invalid email format",
+    "any.required": "Email is required",
+  }),
+  fullName: Joi.string()
+    .pattern(/^[a-zA-Z]+(?:\s[a-zA-Z]+)*$/)
+    .required()
+    .messages({
+      "string.pattern.base":
+        "Full name must contain only letters and may have space to separate first name and last name",
+      "any.required": "Full name is required",
+    }),
+});

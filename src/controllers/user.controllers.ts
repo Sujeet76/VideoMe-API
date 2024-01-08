@@ -14,6 +14,7 @@ import {
 } from "../validation/validation.js";
 import { IUser } from "../models/model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import Joi from "joi";
 
 const options = {
   httpOnly: true,
@@ -347,5 +348,129 @@ export const updateCoverImg = asyncHandler(
       .json(
         new ApiResponse(200, "Cover image updated successfully", updatedUser)
       );
+  }
+);
+
+export const updateUserDetails = asyncHandler(
+  async (req: RequestWithUser, res: Response) => {
+    const { _id } = req.user!;
+    const user = await User.findById(_id);
+    if (!user) {
+      throw new ApiError(404, "User not found!");
+    }
+
+    const { email, fullName } = req.body;
+    if (email) {
+      const validateSchema = Joi.object({
+        email: Joi.string().email().required().messages({
+          "string.email": "Invalid email format",
+          "any.required": "Email is required",
+        }),
+      });
+      const { error } = validateSchema.validate({ email });
+      if (error) throw new ApiError(400, error.message);
+      user.email = email;
+    }
+
+    if (fullName) {
+      const validateSchema = Joi.object({
+        fullName: Joi.string()
+          .pattern(/^[a-zA-Z]+(?:\s[a-zA-Z]+)*$/)
+          .required()
+          .messages({
+            "string.pattern.base":
+              "Full name must contain only letters and may have space to separate first name and last name",
+            "any.required": "Full name is required",
+          }),
+      });
+      const { error } = validateSchema.validate({ fullName });
+      if (error) throw new ApiError(400, error.message);
+      user.fullName = fullName;
+    }
+
+    await user.save({ validateBeforeSave: false });
+
+    const updatedUser = await User.findById(user._id).select(
+      "-password -refreshToken"
+    );
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, "User updated successfully", updatedUser));
+  }
+);
+
+export const getUserChannelProfile = asyncHandler(
+  async (req: RequestWithUser, res: Response) => {
+    /**
+     * steps in this function
+     * 1. get user name from params
+     * 2. validate user name
+     * 3. fetch all the details about its channel like number of subscriber and total videos uploaded by him and list of channel to whom he subscribed etc
+     * 4. send back response
+     */
+
+    const { username } = req.params;
+    if (!username.trim()) {
+      throw new ApiError(400, "Username is required");
+    }
+
+    const channel = await User.aggregate([
+      {
+        $match: {
+          username: username?.toLowerCase(),
+        },
+      },
+      {
+        $lookup: {
+          from: "subscriptions",
+          localField: "_id",
+          foreignField: "channel",
+          as: "subscribers",
+        },
+      },
+      {
+        $lookup: {
+          from: "subscriptions",
+          localField: "_id",
+          foreignField: "subscriber",
+          as: "subscribedTo",
+        },
+      },
+      {
+        $addFields: {
+          subscribersCount: {
+            $size: "$subscribers",
+          },
+          channelSubscribedCount: {
+            $size: "$subscribedTo",
+          },
+          isSubscribed: {
+            $cond: {
+              if: { $in: [req?.user?._id, "$subscribers.subscriber"] },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          fullName: 1,
+          username: 1,
+          subscribersCount: 1,
+          channelSubscribedCount: 1,
+          isSubscribed: 1,
+          avatar: 1,
+          coverImage: 1,
+        },
+      },
+    ]);
+
+    if (!channel?.length) {
+      throw new ApiError(404, "Channel not found");
+    }
+
+    res.status(200).json(new ApiResponse(200, "Channel found", channel[0]));
   }
 );
