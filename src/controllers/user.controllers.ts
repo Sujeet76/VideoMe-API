@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import Jwt from "jsonwebtoken";
 import { asyncHandler } from "../utils/AsyncHandler.js";
 import { ILogin, IRegister } from "./user.type.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -12,6 +13,10 @@ const options = {
   httpOnly: true,
   secure: true,
 };
+
+interface RequestWithUser extends Request {
+  user?: IUser;
+}
 
 const generateRefreshAndAccessToken = (user: IUser) => {
   try {
@@ -159,6 +164,74 @@ export const loginUser = asyncHandler(
         new ApiResponse(200, "User logged in successfully", {
           user: updatedUser,
           refreshToken,
+          accessToken,
+        })
+      );
+  }
+);
+
+export const logout = asyncHandler(
+  async (req: RequestWithUser, res: Response) => {
+    const { _id } = req.user!;
+
+    const user = await User.findByIdAndUpdate(_id, {
+      $unset: {
+        refreshToken: "",
+      },
+    });
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    res
+      .clearCookie("accessToken")
+      .clearCookie("refreshToken")
+      .status(200)
+      .json(new ApiResponse(200, "User logged out successfully", {}));
+  }
+);
+
+export const getAccessToken = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userRefreshToken =
+      req.cookies?.refreshToken || req.body?.refreshToken;
+
+    if (!userRefreshToken) {
+      throw new ApiError(401, "Unauthorized, Refresh token is required");
+    }
+
+    const { _id } = Jwt.verify(
+      userRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET!
+    ) as { _id: string };
+
+    if (!_id) {
+      throw new ApiError(401, "Unauthorized, Invalid refresh token");
+    }
+
+    const user = await User.findById(_id);
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    if (user.refreshToken !== userRefreshToken) {
+      throw new ApiError(401, "Unauthorized, Invalid refresh token");
+    }
+
+    const { refreshToken, accessToken } = generateRefreshAndAccessToken(user);
+
+    user.save({ validateBeforeSave: false });
+
+    res
+      .status(200)
+      .cookie("accessToken", accessToken, {
+        ...options,
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .json(
+        new ApiResponse(200, "Access token generated successfully", {
           accessToken,
         })
       );

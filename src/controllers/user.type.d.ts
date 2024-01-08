@@ -8,7 +8,13 @@ export interface IRegister {
 }
 
 export interface ILogin {
-  email ?:string;
-  username?:string;
-  password:string;
+  email?: string;
+  username?: string;
+  password: string;
+}
+
+export interface ILogout {
+  user: {
+    _id: string;
+  };
 }
