@@ -26,3 +26,17 @@ export const registerSchema = Joi.object({
       "any.required": "Full name is required",
     }),
 });
+
+export const passwordValidation = Joi.object({
+  newPassword: Joi.string()
+    .pattern(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/)
+    .required()
+    .messages({
+      "string.pattern.base":
+        "New Password must be at least 8 characters long and contain both letters and numbers",
+      "any.required": "New Password is required",
+    }),
+  currentPassword: Joi.string().required().messages({
+    "any.required": "Current password is required",
+  }),
+});

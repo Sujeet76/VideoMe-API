@@ -38,6 +38,7 @@ export const deleteFromCloudinary = async (publicUrl: string) => {
         invalidate: true,
       })
       .then((result) => {
+        console.log("Deleted!!");
         return result;
       })
       .catch((error) => {

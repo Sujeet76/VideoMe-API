@@ -13,8 +13,7 @@ export interface ILogin {
   password: string;
 }
 
-export interface ILogout {
-  user: {
-    _id: string;
-  };
+export interface IUpdatePassword {
+  currentPassword: string;
+  newPassword: string;
 }
