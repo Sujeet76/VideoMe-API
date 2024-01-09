@@ -10,11 +10,10 @@ cloudinary.config({
 
 export const uploadToCloudinary = async (filePath: string) => {
   try {
-    if (!filePath) return null;
+    if (!filePath || !fs.existsSync(filePath)) return null;
 
     const result = await cloudinary.uploader.upload(filePath, {
       folder: CLOUDINARY_IMAGE_FOLDER,
-      use_filename: true,
       resource_type: "auto",
     });
 
@@ -23,7 +22,9 @@ export const uploadToCloudinary = async (filePath: string) => {
     return result;
   } catch (error) {
     console.log("☁️ Error while uploading file to cloudinary! error : ", error);
-    fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
     return null;
   }
 };

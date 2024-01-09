@@ -87,6 +87,10 @@ web_modules/
 .next
 out
 
+channel.json
+r.json
+subscription.json
+
 # Nuxt.js build / generate output
 .nuxt
 dist

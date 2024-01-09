@@ -1,14 +1,12 @@
-import { model,Schema } from "mongoose";
+import { model, Schema } from "mongoose";
 import type { ISubscriptions } from "./model.js";
 const subscriptionSchema = new Schema<ISubscriptions>(
   {
-    subscriber: [
-      {
-        type: Schema.Types.ObjectId, //user who subscribed
-        required: [true, "User reference is required"],
-        ref: "User",
-      },
-    ],
+    subscriber: {
+      type: Schema.Types.ObjectId, //user who subscribed
+      required: [true, "User reference is required"],
+      ref: "User",
+    },
     channel: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -18,4 +16,7 @@ const subscriptionSchema = new Schema<ISubscriptions>(
   { timestamps: true }
 );
 
-export const Subscription = model<ISubscriptions>("Subscription", subscriptionSchema);
+export const Subscription = model<ISubscriptions>(
+  "Subscription",
+  subscriptionSchema
+);

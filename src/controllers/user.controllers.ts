@@ -76,6 +76,7 @@ export const registerUser = asyncHandler(
 
     const avatar = files?.avatar[0]?.path;
     if (!avatar) {
+      console.log({ avatar });
       throw new ApiError(400, "Profile image is required");
     }
     // check if user have given cover image

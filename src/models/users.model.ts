@@ -27,7 +27,7 @@ const userSchema = new Schema<IUser>(
     },
     avatar: {
       type: String,
-      required: [true, "Profile image is required"],
+      required: [true, "Profile image is required =>"],
     },
     coverImage: {
       type: String,
