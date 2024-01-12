@@ -1,4 +1,10 @@
 {
   "files.autoSave": "afterDelay",
-  "cSpell.words": ["alphanum", "CLOUDINARY", "fieldname", "pixabay"]
+  "cSpell.words": [
+    "alphanum",
+    "CLOUDINARY",
+    "fieldname",
+    "healthcheck",
+    "pixabay"
+  ]
 }
