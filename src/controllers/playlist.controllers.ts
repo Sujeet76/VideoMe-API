@@ -1,9 +1,9 @@
+import mongoose from "mongoose";
 import { Request, Response } from "express";
 import { IUser } from "../models/model.js";
 import { asyncHandler } from "../utils/AsyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { Video } from "../models/videos.models.js";
 import { Playlist } from "../models/playlists.model.js";
 
 interface RequestWithUser extends Request {
@@ -34,12 +34,12 @@ export const createPlaylist = asyncHandler(
 
 export const getUsersPlaylist = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
-    const { userId } = req.params;
-    if (!userId) throw new ApiError(400, "User id is required!");
+    const { _id } = req.user!;
+    if (!_id) throw new ApiError(400, "User id is required!");
     const playlist = await Playlist.aggregate([
       {
         $match: {
-          owner: userId,
+          owner: _id,
         },
       },
       {
@@ -47,7 +47,7 @@ export const getUsersPlaylist = asyncHandler(
           from: "videos",
           localField: "videos",
           foreignField: "_id",
-          as: "playlistVideo",
+          as: "videos",
         },
       },
     ]);
@@ -63,12 +63,14 @@ export const getUsersPlaylist = asyncHandler(
 export const getPlaylistById = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { playlistId } = req.params;
+    const { _id } = req.user!;
     if (!playlistId) throw new ApiError(404, "Playlist id is required!");
 
     const playlist = await Playlist.aggregate([
       {
         $match: {
-          _id: playlistId,
+          _id: new mongoose.Types.ObjectId(playlistId),
+          owner: _id,
         },
       },
       {
@@ -76,7 +78,7 @@ export const getPlaylistById = asyncHandler(
           from: "videos",
           localField: "videos",
           foreignField: "_id",
-          as: "playlistVideo",
+          as: "videos",
         },
       },
     ]);
@@ -91,59 +93,66 @@ export const getPlaylistById = asyncHandler(
 export const addVideosToPlaylist = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { playlistId } = req.params;
-    const videoIds = req.body;
+    const { videoIds } = req.body;
 
     if (!playlistId) throw new ApiError(400, "Playlist id is required!");
-    if (!videoIds.length)
-      throw new ApiError(400, "Video id (array of video id) is required!");
-
     if (!Array.isArray(videoIds))
       throw new ApiError(400, "Video id must be in array!");
 
-    const playlist = await Playlist.findByIdAndUpdate(
-      playlistId,
-      {
-        $push: {
-          videos: {
-            $each: videoIds,
+    if (!videoIds.length)
+      throw new ApiError(400, "Video id (array of video id) is required!");
+
+    let playlist;
+    try {
+      playlist = await Playlist.findByIdAndUpdate(
+        playlistId,
+        {
+          $addToSet: {
+            videos: {
+              $each: videoIds,
+            },
           },
         },
-      },
-      { new: true }
-    );
+        { new: true }
+      );
+    } catch (error: any) {
+      throw new ApiError(
+        500,
+        `Error while inserting videos into playlist ${error.message}`
+      );
+    }
 
-    if (!playlist)
-      throw new ApiError(500, "Error while pushing videos id in playlist");
+    const updatedPlaylist = await Playlist.findById(playlistId).populate(
+      "videos"
+    );
 
     return res
       .status(200)
-      .json(new ApiResponse(200, "Videos added to playlist", playlist));
+      .json(new ApiResponse(200, "Videos added to playlist", updatedPlaylist));
   }
 );
 
 export const removeVideosToPlaylist = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { playlistId } = req.params;
-    const videoIds = req.body;
+    const { videoIds } = req.body;
 
     if (!playlistId) throw new ApiError(400, "Playlist id is required!");
-    if (!videoIds.length)
-      throw new ApiError(400, "Video id (array of video id) is required!");
-
     if (!Array.isArray(videoIds))
       throw new ApiError(400, "Video id must be in array!");
+
+    if (!videoIds.length)
+      throw new ApiError(400, "Video id (array of video id) is required!");
 
     const playlist = await Playlist.findByIdAndUpdate(
       playlistId,
       {
-        $pop: {
-          videos: {
-            $each: videoIds,
-          },
+        $pullAll: {
+          videos: videoIds,
         },
       },
       { new: true }
-    );
+    ).populate("videos");
 
     if (!playlist)
       throw new ApiError(500, "Error while removing videos id from playlist");

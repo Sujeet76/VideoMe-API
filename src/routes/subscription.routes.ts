@@ -11,9 +11,10 @@ subscriptionRouter.use(isAuthorized); // Apply verifyJWT middleware to all route
 
 subscriptionRouter
   .route("/c/:channelId")
-  .get(getSubscribedChannels)
+  .get(getUserChannelSubscribers) // controller to return channel list to which user has subscribed
   .post(toggleSubscription);
 
-subscriptionRouter.route("/u/:subscriberId").get(getUserChannelSubscribers);
+// controller to return subscriber list of a channel
+subscriptionRouter.route("/u/:subscriberId").get(getSubscribedChannels);
 
 export default subscriptionRouter;

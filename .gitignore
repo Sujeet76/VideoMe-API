@@ -90,6 +90,9 @@ out
 channel.json
 r.json
 subscription.json
+photo.json
+video.json
+rr.json
 
 # Nuxt.js build / generate output
 .nuxt

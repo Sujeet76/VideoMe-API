@@ -8,12 +8,15 @@ cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
 });
 
-export const uploadToCloudinary = async (filePath: string) => {
+export const uploadToCloudinary = async (
+  filePath: string,
+  folder: string = CLOUDINARY_IMAGE_FOLDER
+) => {
   try {
     if (!filePath || !fs.existsSync(filePath)) return null;
 
     const result = await cloudinary.uploader.upload(filePath, {
-      folder: CLOUDINARY_IMAGE_FOLDER,
+      folder: folder,
       resource_type: "auto",
     });
 

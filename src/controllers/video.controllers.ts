@@ -10,6 +10,7 @@ import {
 } from "../utils/CloudinaryUploadAndDelete.js";
 import { Video } from "../models/videos.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { CLOUDINARY_VIDEO_FOLDER } from "../constant.js";
 
 interface RequestWithUser extends Request {
   user?: IUser;
@@ -18,7 +19,13 @@ interface RequestWithUser extends Request {
 // TODO:Check is it correct
 export const getAllVideos = asyncHandler(
   async (req: Request<IVideoQuery, {}, {}>, res: Response) => {
-    const { page = 1, limit = 10, sortedBy, sortedType, userId } = req.params;
+    const {
+      page = 1,
+      limit = 10,
+      sortedBy = "createdAt",
+      sortedType = "asc",
+      userId,
+    } = req.params;
 
     if (!sortedBy || !sortedType || !userId) {
       throw new ApiError(404, "Sorted by, sort type, user id is required");
@@ -27,7 +34,7 @@ export const getAllVideos = asyncHandler(
     if (!["createdAt", "views", "duration"].includes(sortedBy)) {
       throw new ApiError(
         404,
-        "Sorted by must be one of createdAt, views, duration"
+        "Sorted by must be one of createdAt, views, duration and same as given spelling and letter"
       );
     }
 
@@ -40,18 +47,21 @@ export const getAllVideos = asyncHandler(
 
     const sortOrder = sortedType === "asc" ? 1 : -1;
 
-    const allVideo = await User.aggregate([
+    const totalDocument = await Video.aggregate([
       {
         $match: {
-          _id: userId,
+          owner: userId,
         },
       },
       {
-        $lookup: {
-          from: "videos",
-          localField: "_id",
-          foreignField: "owner",
-          as: "userVideos",
+        $count: "length",
+      },
+    ]);
+
+    const allVideo = await Video.aggregate([
+      {
+        $match: {
+          owner: userId,
         },
       },
       {
@@ -60,12 +70,23 @@ export const getAllVideos = asyncHandler(
         },
       },
       {
-        $limit: limit,
-      },
-      {
         $skip: (page - 1) * limit,
       },
+      {
+        $limit: limit,
+      },
     ]);
+
+    return res.status(200).json(
+      new ApiResponse(200, "All videos", {
+        limit: limit,
+        currentPage: page,
+        totalPages: Math.ceil(totalDocument.length / limit),
+        videos: {
+          ...allVideo,
+        },
+      })
+    );
   }
 );
 
@@ -73,21 +94,26 @@ export const publishAVideo = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { title, description } = req.body;
     const { _id } = req.user!;
-    const files = (req.files as Express.Multer.File[]) || undefined;
+    const files = req.files as
+      | { [fieldname: string]: Express.Multer.File[] }
+      | undefined;
 
     if (!title.trim() || !description.trim()) {
       throw new ApiError(404, "Title and description is required");
     }
 
-    const thumbnailPath = files[0]?.path;
-    const videoPath = files[1]?.path;
+    const videoPath = files?.videoFile[0]?.path;
+    const thumbnailPath = files?.thumbnail[0]?.path;
 
     if (!thumbnailPath || !videoPath) {
       throw new ApiError(404, "Thumbnail and video is required");
     }
 
     const uploadThumbnail = await uploadToCloudinary(thumbnailPath);
-    const uploadVideo = await uploadToCloudinary(videoPath);
+    const uploadVideo = await uploadToCloudinary(
+      videoPath,
+      CLOUDINARY_VIDEO_FOLDER
+    );
 
     if (!uploadThumbnail) {
       throw new ApiError(500, "Upload thumbnail  failed");
@@ -97,17 +123,14 @@ export const publishAVideo = asyncHandler(
       throw new ApiError(500, "Upload video failed");
     }
 
-    const videoUpload = await Video.create(
-      {
-        title,
-        description,
-        thumbnail: uploadThumbnail?.secure_url ?? "",
-        videoFile: uploadVideo?.secure_url ?? "",
-        owner: _id,
-        duration: uploadVideo.duration ?? 0,
-      },
-      { new: true }
-    );
+    const videoUpload = await Video.create({
+      title,
+      description,
+      thumbnail: uploadThumbnail?.secure_url ?? "",
+      videoFile: uploadVideo?.secure_url ?? "",
+      owner: _id,
+      duration: uploadVideo?.duration ?? 0,
+    });
 
     return res
       .status(201)
@@ -134,84 +157,58 @@ export const getVideoById = asyncHandler(
 
 export const updateVideo = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
-    const { _id } = req.user!;
     const { videoId } = req.params;
+    const { title, description } = req.body;
     const file = (req.file as Express.Multer.File) || undefined;
 
-    const video = await Video.findById(videoId);
-    if (!video) {
+    const isVideoExist = await Video.findById(videoId);
+    if (!isVideoExist) {
       throw new ApiError(404, "Video file not found");
     }
 
-    const videoPath = file?.path;
-
-    if (!videoPath) {
-      throw new ApiError(404, "Video file is required!");
+    // update title if title is there
+    if (title) {
+      isVideoExist.title = title;
     }
 
-    const uploadVideo = await uploadToCloudinary(videoPath);
-    // TODO:Delete previous video
+    // update description if description exist
+    if (description) {
+      isVideoExist.description = description;
+    }
 
-    const updateVideo = await Video.findByIdAndUpdate(
-      video?.id,
-      {
-        $set: {
-          videoFile: uploadVideo?.secure_url,
-        },
-      },
-      { new: true }
-    );
+    // update thumbnail if thumbnail exist
+    if (file) {
+      const thumbnail = file?.path;
+      if (!thumbnail) throw new ApiError(404, "Thumbnail is required");
+      const uploadVideo = await uploadToCloudinary(thumbnail);
+      const prevUrl = isVideoExist.thumbnail;
+      isVideoExist.thumbnail = uploadVideo?.secure_url ?? "";
+
+      // delete prev thumbnail (temporary check because all the assets are not upload to cloudinary)
+      if (!prevUrl.includes("pixabay.com")) deleteFromCloudinary(thumbnail);
+    }
+
+    // save the document
+    await isVideoExist.save();
+
+    const updatedDocument = await Video.findById(isVideoExist._id);
 
     return res
       .status(200)
-      .json(new ApiResponse(200, "Video file updated", updateVideo));
+      .json(new ApiResponse(200, "Video file updated", updatedDocument));
   }
 );
 
-export const updateThumbnail = asyncHandler(
-  async (req: RequestWithUser, res: Response) => {
-    const { _id } = req.user!;
-    const { videoId } = req.params;
-    const file = (req.file as Express.Multer.File) || undefined;
-
-    const video = await Video.findById(videoId);
-    if (!video) {
-      throw new ApiError(404, "Video file not found");
-    }
-
-    const thumbnailPath = file?.path;
-
-    if (!thumbnailPath) {
-      throw new ApiError(404, "Video file is required!");
-    }
-
-    const uploadThumbnail = await uploadToCloudinary(thumbnailPath);
-    deleteFromCloudinary(thumbnailPath);
-
-    const updateVideo = await Video.findByIdAndUpdate(
-      video?.id,
-      {
-        $set: {
-          thumbnail: uploadThumbnail?.secure_url,
-        },
-      },
-      { new: true }
-    );
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, "Thumbnail updated", updateVideo));
-  }
-);
-
+// testing remaining
 export const deleteVideo = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { videoId } = req.params;
     if (!videoId) {
-      throw new ApiError(404, "Video is required");
+      throw new ApiError(404, "Video id is required");
     }
 
     const deleteFile = await Video.findByIdAndDelete(videoId);
+    // TODO:delete video from cloudinary
 
     return res
       .status(200)
