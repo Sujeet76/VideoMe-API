@@ -11,7 +11,7 @@ const router = Router();
 
 router.route("/:videoId").get(getVideoComments);
 
-router.route("/").post(isAuthorized, addComment);
+router.route("/:videoId").post(isAuthorized, addComment);
 router
   .route("/c/:commentId")
   .delete(isAuthorized, deleteComment)

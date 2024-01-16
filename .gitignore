@@ -93,6 +93,7 @@ subscription.json
 photo.json
 video.json
 rr.json
+comment.json
 
 # Nuxt.js build / generate output
 .nuxt

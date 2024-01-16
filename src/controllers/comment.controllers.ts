@@ -17,20 +17,72 @@ const getVideoComments = asyncHandler(async (req: Request, res: Response) => {
 
   if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid video id");
 
+  if (!Number(page) || !Number(limit))
+    throw new ApiError(400, "Invalid number");
+  if (Number(page) < 1 || Number(limit) < 1)
+    throw new ApiError(400, "Page and limit must be greater then 0");
+
   const skip = (Number(page) - 1) * Number(limit);
 
   try {
-    const comment = await Comment.find({ video: videoId })
-      .skip(skip)
-      .limit(Number(limit))
-      .populate({
-        path: "owner",
-        select:
-          "-password -refreshToken -createdAt -updatedAt -coverImage -email -__v",
-      });
-    return res
-      .status(200)
-      .json(new ApiResponse(200, "comment fetched successfully", comment));
+    const totalDocument = await Comment.aggregate([
+      { $match: { video: new mongoose.Types.ObjectId(videoId) } },
+      { $count: "length" },
+    ]);
+
+    const totalPage = Math.ceil(totalDocument[0].length / Number(limit));
+
+    if (totalPage < Number(page))
+      return res.status(200).json(new ApiResponse(200, "No more comment", {}));
+
+    const comment = await Comment.aggregate([
+      {
+        $match: {
+          video: new mongoose.Types.ObjectId(videoId),
+        },
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: Number(limit),
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "owner",
+          foreignField: "_id",
+          as: "owner",
+        },
+      },
+      {
+        $addFields: {
+          owner: {
+            $first: "$owner",
+          },
+        },
+      },
+      {
+        $project: {
+          content: 1,
+          video: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          "owner.username": 1,
+          "owner.email": 1,
+          "owner.fullName": 1,
+          "owner.avatar": 1,
+        },
+      },
+    ]);
+    return res.status(200).json(
+      new ApiResponse(200, "comment fetched successfully", {
+        currentPage: page,
+        totalPage: totalPage,
+        limit,
+        comments: comment,
+      })
+    );
   } catch (error: any) {
     throw new ApiError(
       500,
@@ -98,7 +150,7 @@ const deleteComment = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(400, "Invalid comment id");
 
   try {
-    await Comment.findByIdAndUpdate(commentId);
+    await Comment.findByIdAndDelete(commentId);
     res
       .status(200)
       .json(new ApiResponse(200, "comment deleted successfully", {}));
