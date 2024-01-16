@@ -5,12 +5,12 @@ const likeSchema = new Schema<ILikes>(
   {
     comment: {
       type: Schema.Types.ObjectId,
-      required: [true, "Comment reference is required"],
+      // required: [true, "Comment reference is required"],
       ref: "Comment",
     },
     video: {
       type: Schema.Types.ObjectId,
-      required: [true, "video reference is required"],
+      // required: [true, "video reference is required"],
       ref: "Video",
     },
     likedBy: {
@@ -20,7 +20,7 @@ const likeSchema = new Schema<ILikes>(
     },
     tweet: {
       type: Schema.Types.ObjectId,
-      required: [true, "tweet reference is required"],
+      // required: [true, "tweet reference is required"],
       ref: "Tweet",
     },
   },
