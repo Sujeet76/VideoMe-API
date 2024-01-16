@@ -1,4 +1,4 @@
-export interface IVideoQuery {
+export interface IVideoQuery  {
   page?: number;
   limit?: number;
   query?: string;

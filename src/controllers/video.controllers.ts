@@ -11,6 +11,7 @@ import {
 import { Video } from "../models/videos.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { CLOUDINARY_VIDEO_FOLDER } from "../constant.js";
+import mongoose, { isValidObjectId } from "mongoose";
 
 interface RequestWithUser extends Request {
   user?: IUser;
@@ -25,20 +26,24 @@ export const getAllVideos = asyncHandler(
       sortedBy = "createdAt",
       sortedType = "asc",
       userId,
-    } = req.params;
+    } = req.query;
+
+    console.table([page, limit, sortedBy, sortedType, userId]);
+
+    if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid user id");
 
     if (!sortedBy || !sortedType || !userId) {
       throw new ApiError(404, "Sorted by, sort type, user id is required");
     }
 
-    if (!["createdAt", "views", "duration"].includes(sortedBy)) {
+    if (!["createdAt", "views", "duration"].includes(sortedBy.toString())) {
       throw new ApiError(
         404,
         "Sorted by must be one of createdAt, views, duration and same as given spelling and letter"
       );
     }
 
-    if (!["asc", "desc"].includes(sortedType)) {
+    if (!["asc", "desc"].includes(sortedType.toString())) {
       throw new ApiError(
         404,
         "Sorted type must be one of ascending(asc), descending(desc)"
@@ -46,45 +51,70 @@ export const getAllVideos = asyncHandler(
     }
 
     const sortOrder = sortedType === "asc" ? 1 : -1;
+    console.log({ sortOrder });
 
     const totalDocument = await Video.aggregate([
       {
         $match: {
-          owner: userId,
+          owner: new mongoose.Types.ObjectId(userId.toString()),
         },
       },
       {
         $count: "length",
+      },
+      {
+        $project: {
+          length: 1,
+        },
       },
     ]);
 
     const allVideo = await Video.aggregate([
       {
         $match: {
-          owner: userId,
+          owner: new mongoose.Types.ObjectId(userId.toString()),
+        },
+      },
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "video",
+          as: "likes",
+        },
+      },
+      {
+        $addFields: {
+          likes: {
+            $size: "$likes",
+          },
         },
       },
       {
         $sort: {
-          [sortedBy]: sortOrder,
+          [sortedBy.toString()]: sortOrder,
         },
       },
       {
-        $skip: (page - 1) * limit,
+        $skip: (Number(page) - 1) * Number(limit),
       },
       {
-        $limit: limit,
+        $limit: Number(limit),
       },
     ]);
+
+    if (!allVideo)
+      throw new ApiError(
+        500,
+        "Something went wrong! while fetching all videos"
+      );
 
     return res.status(200).json(
       new ApiResponse(200, "All videos", {
         limit: limit,
         currentPage: page,
-        totalPages: Math.ceil(totalDocument.length / limit),
-        videos: {
-          ...allVideo,
-        },
+        totalPages: Math.ceil(totalDocument[0]?.length / Number(limit)),
+        videos: allVideo,
       })
     );
   }
