@@ -109,13 +109,14 @@ const getLikedVideos = asyncHandler(
     try {
       const likedVideos = await Like.find({
         likedBy: userId,
-        video: { $exists: true },
+        video: { $ne: null },
       }).populate("video");
 
       res
         .status(200)
         .json(new ApiResponse(200, "Fetched all liked video", likedVideos));
     } catch (err: any) {
+      console.log(err);
       throw new ApiError(
         500,
         "something went wrong while fetching liked videos"
