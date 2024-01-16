@@ -18,36 +18,75 @@ const getChannelStats = asyncHandler(
       // TODO: Get the channel stats like total video views, total subscribers, total videos, total likes etc.
       const { _id: channelId } = req.user!;
 
-      const totalVideos = await Video.countDocuments({
-        owner: channelId,
-      });
-      const totalSubscribers = await Subscription.countDocuments({
-        channel: channelId,
-      });
-
-      const totalLikes = await Like.countDocuments({
-        video: { $in: totalVideos },
-      });
-
-      const totalViews = await Video.aggregate([
+      // stats like total video views, total subscribers, total videos, total likes
+      const countStats = await Video.aggregate([
         {
           $match: {
             owner: channelId,
           },
         },
         {
+          $lookup: {
+            from: "likes",
+            localField: "_id",
+            foreignField: "video",
+            as: "likes",
+          },
+        },
+        {
+          $addFields: {
+            likes: {
+              $size: "$likes",
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "subscriptions",
+            localField: "owner",
+            foreignField: "channel",
+            as: "totalSubscribers",
+          },
+        },
+        {
+          $addFields: {
+            totalSubscribers: {
+              $size: "$totalSubscribers",
+            },
+          },
+        },
+        {
           $group: {
             _id: null,
-            totalViews: { $sum: "$views" },
+            totalVideo: {
+              $sum: 1,
+            },
+            totalSubscribers: {
+              $sum: "$totalSubscribers",
+            },
+            totalLike: {
+              $sum: "$likes",
+            },
+            totalViews: {
+              $sum: "$views",
+            },
+          },
+        },
+        {
+          $project: {
+            totalVideo: 1,
+            totalLike: 1,
+            totalViews: 1,
+            totalSubscribers: {
+              $ceil: {
+                $divide: ["$totalSubscribers", "$totalVideo"],
+              },
+            },
           },
         },
       ]);
 
-      // total views compared to subscribers
-      const viewsPerSubscriber =
-        Number(totalViews[0].totalViews) / totalSubscribers;
-
-      // subscriber gain by day
+      // subscriber gain per day
       const subscriberGainedPerDay = await Subscription.aggregate([
         {
           $match: {
@@ -72,16 +111,21 @@ const getChannelStats = asyncHandler(
         },
       ]);
 
-      return res.status(200).json({
-        totalVideos,
-        totalSubscribers,
-        totalLikes,
-        totalViews: totalViews.length ? totalViews[0].totalViews : 0,
-        subscriberGainedPerDay,
-        viewsPerSubscriber,
-      });
+      return res.status(200).json(
+        new ApiResponse(200, "Channel stats fetched successfully", {
+          totalSubscribers: countStats[0]?.totalSubscribers ?? 0,
+          totalVideos: countStats[0]?.totalVideo ?? 0,
+          totalLikes: countStats[0]?.totalLike ?? 0,
+          totalViews: countStats[0]?.totalViews ?? 0,
+          subscriberGainedPerDay,
+        })
+      );
     } catch (error: any) {
-      return res.status(500).json({ error: "Internal Server Error" });
+      console.log(error);
+      throw new ApiError(
+        500,
+        "something went wrong while fetching dashboard data"
+      );
     }
   }
 );
