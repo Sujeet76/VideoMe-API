@@ -17,64 +17,73 @@ interface RequestWithUser extends Request {
   user?: IUser;
 }
 
-// TODO:Check is it correct
+// TODO:Check is it correct -> Done
 export const getAllVideos = asyncHandler(
   async (req: Request<IVideoQuery, {}, {}>, res: Response) => {
     const {
       page = 1,
       limit = 10,
-      sortedBy = "createdAt",
-      sortedType = "asc",
+      sortBy = "createdAt",
+      sortType = "asc",
+      query,
       userId,
     } = req.query;
 
-    console.table([page, limit, sortedBy, sortedType, userId]);
-
     if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid user id");
 
-    if (!sortedBy || !sortedType || !userId) {
+    if (!sortBy || !sortType || !userId) {
       throw new ApiError(404, "Sorted by, sort type, user id is required");
     }
 
-    if (!["createdAt", "views", "duration"].includes(sortedBy.toString())) {
+    if (!["createdAt", "views", "duration"].includes(sortBy.toString())) {
       throw new ApiError(
         404,
         "Sorted by must be one of createdAt, views, duration and same as given spelling and letter"
       );
     }
 
-    if (!["asc", "desc"].includes(sortedType.toString())) {
+    if (!["asc", "desc"].includes(sortType.toString())) {
       throw new ApiError(
         404,
         "Sorted type must be one of ascending(asc), descending(desc)"
       );
     }
 
-    const sortOrder = sortedType === "asc" ? 1 : -1;
-    console.log({ sortOrder });
+    // check whether page and limit is a number else throw error
+    if (!(Number(page) && Number(limit)))
+      throw new ApiError(400, "Page and limit must be number");
 
+    if (Number(page) < 1 || Number(limit) < 1)
+      throw new ApiError(400, "Page and limit must be greater than 0");
+
+    const sortOrder = sortType === "asc" ? 1 : -1;
+    console.log(sortOrder);
+    console.log(sortBy);
+
+    const matchStage: any = {
+      owner: new mongoose.Types.ObjectId(userId.toString()),
+    };
+
+    // if query is there then filter document on its title
+    if (query?.toString()?.trim()) {
+      matchStage.title = new RegExp(query.toString(), "i");
+    }
+    // count total document
     const totalDocument = await Video.aggregate([
       {
-        $match: {
-          owner: new mongoose.Types.ObjectId(userId.toString()),
-        },
+        $match: matchStage,
       },
       {
         $count: "length",
       },
-      {
-        $project: {
-          length: 1,
-        },
-      },
     ]);
 
+    // do filtering and pagination
     const allVideo = await Video.aggregate([
       {
-        $match: {
-          owner: new mongoose.Types.ObjectId(userId.toString()),
-        },
+        $match: matchStage,
       },
+      // populate like to calc total likes
       {
         $lookup: {
           from: "likes",
@@ -83,6 +92,7 @@ export const getAllVideos = asyncHandler(
           as: "likes",
         },
       },
+      // added total likes per videos
       {
         $addFields: {
           likes: {
@@ -90,14 +100,17 @@ export const getAllVideos = asyncHandler(
           },
         },
       },
+      // sorting by given sorted by and sorted type
       {
         $sort: {
-          [sortedBy.toString()]: sortOrder,
+          [sortBy.toString()]: sortOrder,
         },
       },
+      // skip it based on page number
       {
         $skip: (Number(page) - 1) * Number(limit),
       },
+      // set limit
       {
         $limit: Number(limit),
       },
