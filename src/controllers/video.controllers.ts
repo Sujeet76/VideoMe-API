@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/AsyncHandler.js";
 import { IVideoQuery } from "./video.type.js";
 import { ApiError } from "../utils/ApiError.js";
-import { User } from "../models/users.model.js";
 import { IUser } from "../models/model.js";
 import {
   deleteFromCloudinary,
@@ -185,11 +184,33 @@ export const getVideoById = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { videoId } = req.params;
 
-    if (!videoId) {
+    if (!isValidObjectId(videoId)) {
       throw new ApiError(400, "Video id is required");
     }
 
-    const video = await Video.findById(videoId);
+    // const video = await Video.findById(videoId);
+    const video = await Video.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(videoId),
+        },
+      },
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "video",
+          as: "likes",
+        },
+      },
+      {
+        $addFields: {
+          likes: {
+            $size: "$likes",
+          },
+        },
+      },
+    ]);
     if (!video) throw new ApiError(404, "Video file not found");
 
     return res
@@ -204,7 +225,10 @@ export const updateVideo = asyncHandler(
     const { title, description } = req.body;
     const file = (req.file as Express.Multer.File) || undefined;
 
-    const isVideoExist = await Video.findById(videoId);
+    const isVideoExist = await Video.findOne({
+      $and: [{ _id: videoId }, { owner: req.user?._id }],
+    });
+
     if (!isVideoExist) {
       throw new ApiError(404, "Video file not found");
     }
@@ -234,7 +258,28 @@ export const updateVideo = asyncHandler(
     // save the document
     await isVideoExist.save();
 
-    const updatedDocument = await Video.findById(isVideoExist._id);
+    const updatedDocument = await Video.aggregate([
+      {
+        $match: {
+          _id: isVideoExist?._id,
+        },
+      },
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "video",
+          as: "likes",
+        },
+      },
+      {
+        $addFields: {
+          likes: {
+            $size: "$likes",
+          },
+        },
+      },
+    ]);
 
     return res
       .status(200)
@@ -246,16 +291,20 @@ export const updateVideo = asyncHandler(
 export const deleteVideo = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { videoId } = req.params;
-    if (!videoId) {
+    if (!isValidObjectId(videoId)) {
       throw new ApiError(404, "Video id is required");
     }
 
-    const deleteFile = await Video.findByIdAndDelete(videoId);
+    const deleteFile = await Video.findByIdAndDelete({
+      $and: [{ _id: videoId }, { owner: req.user?._id }],
+    });
+
+    if (!deleteFile) throw new ApiError(404, "Video not found");
     // TODO:delete video from cloudinary
 
     return res
       .status(200)
-      .json(new ApiResponse(200, "Video deleted successfully", {}));
+      .json(new ApiResponse(200, "Video deleted successfully", deleteFile));
   }
 );
 
@@ -263,22 +312,43 @@ export const togglePublishStatus = asyncHandler(
   async (req: RequestWithUser, res: Response) => {
     const { videoId } = req.params;
 
-    if (!videoId) {
+    if (!isValidObjectId(videoId)) {
       throw new ApiError(404, "Video is required");
     }
 
-    const video = await Video.findById(videoId);
+    const video = await Video.findOne({
+      $and: [{ _id: videoId }, { owner: req.user?._id }],
+    });
     if (!video) throw new ApiError(404, "No video found");
 
-    const updateVideo = await Video.findByIdAndUpdate(
-      videoId,
+    video.isPublished = !video.isPublished;
+    await video.save();
+
+    const videoWithLike = await Video.aggregate([
       {
-        $set: {
-          isPublished: !video?.isPublished,
+        $match: {
+          _id: video?._id,
         },
       },
-      { new: true }
-    );
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "video",
+          as: "likes",
+        },
+      },
+      {
+        $addFields: {
+          likes: {
+            $size: "$likes",
+          },
+        },
+      },
+    ]);
+
+    if (!videoWithLike)
+      throw new ApiError(500, "Something went wrong while updating video");
 
     return res
       .status(200)
@@ -286,7 +356,7 @@ export const togglePublishStatus = asyncHandler(
         new ApiResponse(
           200,
           "Video published toggled successfully",
-          updateVideo
+          videoWithLike
         )
       );
   }
