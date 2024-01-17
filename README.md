@@ -3,18 +3,17 @@
 Welcome to the VideoMe API - your go-to platform for managing multimedia content. This API is built with Node.js and Express.js, using TypeScript. MongoDB serves as the primary database, and Mongoose, along with `mongoose-aggregate-paginate-v2`, is utilized for powerful MongoDB query capabilities. Passwords are securely encrypted using bcrypt, and file uploading is handled with Multer. Cloudinary is integrated for cloud storage, offering a scalable solution for media assets. JSON Web Tokens (JWT) are employed for authorization and authentication, while Joi is used for input validation.
 
 ### some useful links
-| Modal Link               | Postman Link                                     |
-|--------------------------|--------------------------------------------------|
-| [Schema Design](https://app.eraser.io/workspace/ISvPZ5hbXev4jGEPUcIL?origin=share)  | [Postman Collection](https://documenter.getpostman.com/view/28624054/2s9YsRboTE)  |
 
-
+| Modal Link                                                                         | Postman Link                                                                     |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Schema Design](https://app.eraser.io/workspace/ISvPZ5hbXev4jGEPUcIL?origin=share) | [Postman Collection](https://documenter.getpostman.com/view/28624054/2s9YsRboTE) |
 
 ## Table of Contents
 
 1. [Technologies Used](#technologies-used)
 2. [Setup Instructions](#setup-instructions)
    - [Clone the Repository](#1-clone-the-repository)
-   - [](#2-install-dependencies)
+   - [Install dependencies](#2-install-dependencies)
    - [Build the TypeScript Files](#3-build-the-typescript-files)
    - [Run the Project](#4-run-the-project)
    - [Environment Variables](#5-environment-variables)
