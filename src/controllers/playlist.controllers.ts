@@ -192,7 +192,7 @@ export const updatePlaylist = asyncHandler(
 
     if (!isPlaylist) throw new ApiError(404, "Play not found");
 
-    const updatedPlaylist = await Playlist.findById(
+    const updatedPlaylist = await Playlist.findByIdAndUpdate(
       playlistId,
       {
         $set: {
